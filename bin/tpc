@@ -1,0 +1,192 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+source "$SCRIPT_DIR/lib/config.sh"
+source "$SCRIPT_DIR/lib/index.sh"
+source "$SCRIPT_DIR/lib/layout.sh"
+
+usage() {
+  cat <<EOF
+tpc - tmux pane controller
+
+Usage:
+  tpc init                  Create a layout config for the current directory
+  tpc edit                  Edit the layout config for the current directory
+  tpc load                  Load the layout for the current directory
+  tpc load <name>           Load a layout by name
+  tpc list                  List all registered layouts
+  tpc remove                Remove the layout for the current directory
+  tpc remove <name>         Remove a layout by name
+  tpc purge                 Remove all layouts
+EOF
+}
+
+cmd_init() {
+  ensure_config_dir
+
+  local hash config_file
+  hash=$(get_hash "$PWD")
+  config_file=$(get_config_file "$hash")
+
+  if [[ -f "$config_file" ]]; then
+    echo "Layout already exists for this directory."
+    echo "Use 'tpc edit' to modify it."
+    return 1
+  fi
+
+  cp "$TPC_SCRIPT_DIR/templates/default.yml" "$config_file"
+
+  # Prompt for name and description
+  local name description
+  read -rp "Layout name: " name
+  read -rp "Description: " description
+
+  name="${name:-default}"
+  description="${description:-}"
+
+  yq -i ".layout.name = \"$name\" | .layout.description = \"$description\"" "$config_file"
+
+  index_add "$name" "$description" "$hash"
+
+  echo "Config created: $config_file"
+
+  if [[ -n "${EDITOR:-}" ]]; then
+    read -rp "Open in \$EDITOR ($EDITOR)? [Y/n] " open_editor
+    if [[ "${open_editor:-Y}" =~ ^[Yy]$ ]]; then
+      $EDITOR "$config_file"
+      # Re-sync index in case name/description changed
+      local new_name new_desc
+      new_name=$(yq -r '.layout.name // "default"' "$config_file")
+      new_desc=$(yq -r '.layout.description // ""' "$config_file")
+      index_add "$new_name" "$new_desc" "$hash"
+    fi
+  fi
+}
+
+cmd_edit() {
+  ensure_config_dir
+
+  local hash config_file
+  hash=$(get_hash "$PWD")
+  config_file=$(get_config_file "$hash")
+
+  if [[ ! -f "$config_file" ]]; then
+    echo "No layout found for this directory."
+    echo "Use 'tpc init' to create one."
+    return 1
+  fi
+
+  if [[ -z "${EDITOR:-}" ]]; then
+    echo "Error: \$EDITOR is not set." >&2
+    return 1
+  fi
+
+  $EDITOR "$config_file"
+
+  # Re-sync index after edit
+  local name description
+  name=$(yq -r '.layout.name // "default"' "$config_file")
+  description=$(yq -r '.layout.description // ""' "$config_file")
+  index_add "$name" "$description" "$hash"
+
+  echo "Index updated."
+}
+
+cmd_load() {
+  ensure_config_dir
+
+  local config_file
+
+  if [[ -n "${1:-}" ]]; then
+    # Load by name
+    local hash
+    hash=$(index_get_hash_by_name "$1")
+    if [[ -z "$hash" || "$hash" == "null" ]]; then
+      echo "Error: No layout found with name '$1'." >&2
+      return 1
+    fi
+    config_file=$(get_config_file "$hash")
+  else
+    # Load for current directory
+    local hash
+    hash=$(get_hash "$PWD")
+    config_file=$(get_config_file "$hash")
+  fi
+
+  if [[ ! -f "$config_file" ]]; then
+    echo "Error: Config file not found." >&2
+    return 1
+  fi
+
+  load_layout "$config_file"
+}
+
+cmd_list() {
+  ensure_config_dir
+  index_list
+}
+
+cmd_remove() {
+  ensure_config_dir
+
+  if [[ -n "${1:-}" ]]; then
+    # Remove by name
+    local hash
+    hash=$(index_get_hash_by_name "$1")
+    if [[ -z "$hash" || "$hash" == "null" ]]; then
+      echo "Error: No layout found with name '$1'." >&2
+      return 1
+    fi
+    local config_file
+    config_file=$(get_config_file "$hash")
+    rm -f "$config_file"
+    index_remove_by_name "$1"
+    echo "Layout '$1' removed."
+  else
+    # Remove for current directory
+    local hash config_file
+    hash=$(get_hash "$PWD")
+    config_file=$(get_config_file "$hash")
+    if [[ ! -f "$config_file" ]]; then
+      echo "No layout found for this directory."
+      return 1
+    fi
+    local name
+    name=$(yq -r '.layout.name // "unknown"' "$config_file")
+    rm -f "$config_file"
+    index_remove_by_hash "$hash"
+    echo "Layout '$name' removed."
+  fi
+}
+
+cmd_purge() {
+  ensure_config_dir
+
+  read -rp "Remove all layouts? This cannot be undone. [y/N] " confirm
+  if [[ ! "${confirm:-}" =~ ^[Yy]$ ]]; then
+    echo "Aborted."
+    return 0
+  fi
+
+  rm -f "$TPC_CONFIG_DIR"/*.yml
+  echo "layouts: []" > "$TPC_INDEX_FILE"
+  echo "All layouts removed."
+}
+
+# Main
+case "${1:-}" in
+  init)   cmd_init ;;
+  edit)   cmd_edit ;;
+  load)   shift; cmd_load "${1:-}" ;;
+  list)   cmd_list ;;
+  remove) shift; cmd_remove "${1:-}" ;;
+  purge)  cmd_purge ;;
+  -h|--help|"") usage ;;
+  *)
+    echo "Unknown command: $1" >&2
+    usage
+    exit 1
+    ;;
+esac

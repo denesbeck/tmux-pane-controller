@@ -1,0 +1,11 @@
+layout:
+  name: default
+  description: "Default layout"
+  split: vertical
+  panes:
+    - name: editor
+      size: 50
+      command: ""
+    - name: terminal
+      size: 50
+      command: ""
