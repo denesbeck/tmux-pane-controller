@@ -6,22 +6,23 @@ index_add() {
   # Remove existing entry with same hash if any
   index_remove_by_hash "$hash"
 
-  yq -i ".layouts += [{\"name\": \"$name\", \"description\": \"$description\", \"hash\": \"$hash\"}]" "$TPC_INDEX_FILE"
+  NAME="$name" DESC="$description" HASH="$hash" \
+    yq -i '.layouts += [{"name": env(NAME), "description": env(DESC), "hash": env(HASH)}]' "$TPC_INDEX_FILE"
 }
 
 index_remove_by_hash() {
   local hash="$1"
-  yq -i "del(.layouts[] | select(.hash == \"$hash\"))" "$TPC_INDEX_FILE"
+  HASH="$hash" yq -i 'del(.layouts[] | select(.hash == env(HASH)))' "$TPC_INDEX_FILE"
 }
 
 index_remove_by_name() {
   local name="$1"
-  yq -i "del(.layouts[] | select(.name == \"$name\"))" "$TPC_INDEX_FILE"
+  NAME="$name" yq -i 'del(.layouts[] | select(.name == env(NAME)))' "$TPC_INDEX_FILE"
 }
 
 index_get_hash_by_name() {
   local name="$1"
-  yq ".layouts[] | select(.name == \"$name\") | .hash" "$TPC_INDEX_FILE"
+  NAME="$name" yq -r '.layouts[] | select(.name == env(NAME)) | .hash' "$TPC_INDEX_FILE"
 }
 
 index_list() {

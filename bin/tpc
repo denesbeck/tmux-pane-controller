@@ -3,6 +3,14 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
+# Dependency checks
+for cmd in tmux yq b3sum; do
+  if ! command -v "$cmd" &>/dev/null; then
+    echo "Error: '$cmd' is required but not installed." >&2
+    exit 1
+  fi
+done
+
 source "$SCRIPT_DIR/lib/config.sh"
 source "$SCRIPT_DIR/lib/index.sh"
 source "$SCRIPT_DIR/lib/validate.sh"
@@ -50,7 +58,7 @@ cmd_init() {
   name="${name:-default}"
   description="${description:-}"
 
-  yq -i ".layout.name = \"$name\" | .layout.description = \"$description\"" "$config_file"
+  NAME="$name" DESC="$description" yq -i '.layout.name = env(NAME) | .layout.description = env(DESC)' "$config_file"
 
   index_add "$name" "$description" "$hash"
 
