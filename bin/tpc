@@ -5,6 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 source "$SCRIPT_DIR/lib/config.sh"
 source "$SCRIPT_DIR/lib/index.sh"
+source "$SCRIPT_DIR/lib/validate.sh"
 source "$SCRIPT_DIR/lib/layout.sh"
 
 usage() {
@@ -16,6 +17,9 @@ Usage:
   tpc edit                  Edit the layout config for the current directory
   tpc load                  Load the layout for the current directory
   tpc load <name>           Load a layout by name
+  tpc load <path>           Load a layout from a YAML file
+  tpc check                 Validate the layout for the current directory
+  tpc check <name|path>     Validate a layout by name or file path
   tpc list                  List all registered layouts
   tpc remove                Remove the layout for the current directory
   tpc remove <name>         Remove a layout by name
@@ -94,31 +98,60 @@ cmd_edit() {
   echo "Index updated."
 }
 
-cmd_load() {
+resolve_config_file() {
+  local arg="${1:-}"
+
+  # File path
+  if [[ -n "$arg" && -f "$arg" ]]; then
+    echo "$arg"
+    return
+  fi
+
   ensure_config_dir
 
-  local config_file
-
-  if [[ -n "${1:-}" ]]; then
-    # Load by name
+  # Layout name
+  if [[ -n "$arg" ]]; then
     local hash
-    hash=$(index_get_hash_by_name "$1")
+    hash=$(index_get_hash_by_name "$arg")
     if [[ -z "$hash" || "$hash" == "null" ]]; then
-      echo "Error: No layout found with name '$1'." >&2
+      echo "Error: No layout found with name '$arg'." >&2
       return 1
     fi
-    config_file=$(get_config_file "$hash")
+    get_config_file "$hash"
   else
-    # Load for current directory
+    # Current directory
     local hash
     hash=$(get_hash "$PWD")
-    config_file=$(get_config_file "$hash")
+    get_config_file "$hash"
   fi
+}
+
+cmd_check() {
+  local config_file
+  config_file=$(resolve_config_file "${1:-}") || return 1
 
   if [[ ! -f "$config_file" ]]; then
     echo "Error: Config file not found." >&2
     return 1
   fi
+
+  if validate_layout "$config_file"; then
+    echo "Valid."
+  else
+    return 1
+  fi
+}
+
+cmd_load() {
+  local config_file
+  config_file=$(resolve_config_file "${1:-}") || return 1
+
+  if [[ ! -f "$config_file" ]]; then
+    echo "Error: Config file not found." >&2
+    return 1
+  fi
+
+  validate_layout "$config_file" || return 1
 
   load_layout "$config_file"
 }
@@ -176,12 +209,22 @@ cmd_purge() {
 }
 
 # Main
+parse_args() {
+  local cmd="$1"; shift
+
+  case "$cmd" in
+    load)   cmd_load "${1:-}" ;;
+    check)  cmd_check "${1:-}" ;;
+    remove) cmd_remove "${1:-}" ;;
+    *)      echo "Unknown command: $cmd" >&2; usage; exit 1 ;;
+  esac
+}
+
 case "${1:-}" in
   init)   cmd_init ;;
   edit)   cmd_edit ;;
-  load)   shift; cmd_load "${1:-}" ;;
+  load|check|remove) parse_args "$@" ;;
   list)   cmd_list ;;
-  remove) shift; cmd_remove "${1:-}" ;;
   purge)  cmd_purge ;;
   -h|--help|"") usage ;;
   *)
