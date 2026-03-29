@@ -1,0 +1,87 @@
+name: Update Homebrew Formula
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+
+  update-homebrew:
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout tap repository
+        uses: actions/checkout@v5
+        with:
+          repository: denesbeck/homebrew-tpc
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+
+      - name: Update formula
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: |
+          # Strip the leading "v" from the tag
+          CLEAN_VERSION="${VERSION#v}"
+
+          URL="https://github.com/denesbeck/tmux-pane-controller/archive/refs/tags/${VERSION}.tar.gz"
+
+          # Download tarball and compute SHA256
+          curl -sL "${URL}" -o source.tar.gz
+          SHA256=$(sha256sum source.tar.gz | awk '{print $1}')
+
+          # Generate formula
+          mkdir -p Formula
+          cat > Formula/tpc.rb <<EOF
+          class Tpc < Formula
+            desc "CLI tool for managing predefined tmux pane layouts"
+            homepage "https://github.com/denesbeck/tmux-pane-controller"
+            url "${URL}"
+            sha256 "${SHA256}"
+            version "${CLEAN_VERSION}"
+            license "MIT"
+
+            depends_on "yq"
+            depends_on "b3sum" => :recommended
+
+            def install
+              libexec.install "bin"
+              libexec.install "lib"
+              libexec.install "templates"
+
+              (bin/"tpc").write_env_script libexec/"bin/tpc", PATH: "#{Formula["yq"].opt_bin}:#{HOMEBREW_PREFIX}/bin:$PATH"
+            end
+
+            test do
+              assert_match "tpc - tmux pane controller", shell_output("#{bin}/tpc 2>&1", 1)
+            end
+          end
+          EOF
+
+          # Fix indentation — remove the leading spaces from YAML block scalar
+          sed -i 's/^          //' Formula/tpc.rb
+
+      - name: Commit and push formula
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/tpc.rb
+          git commit -m "Update tpc to ${{ github.ref_name }}"
+          git push
