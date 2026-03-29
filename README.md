@@ -13,18 +13,12 @@ A CLI tool for managing predefined tmux pane layouts. Define your pane structure
 ## Dependencies
 
 - [tmux](https://github.com/tmux/tmux)
-- [yq](https://github.com/mikefarah/yq) - YAML processor
-- [b3sum](https://github.com/BLAKE3-team/BLAKE3) - BLAKE3 hashing
-
-```bash
-brew install yq b3sum
-```
 
 ## Install
 
 ```bash
-git clone https://github.com/denesbeck/tmux-pane-controller.git ~/path/to/tmux-pane-controller
-ln -s ~/path/to/tmux-pane-controller/bin/tpc ~/.local/bin/tpc
+brew tap denesbeck/tpc
+brew install tpc
 ```
 
 ## Usage
