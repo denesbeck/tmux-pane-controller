@@ -1,5 +1,7 @@
 # tpc - tmux pane controller
 
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 A CLI tool for managing predefined tmux pane layouts. Define your pane structure in YAML, validate it, and load it with a single command.
 
 ## Features
@@ -109,6 +111,17 @@ This produces:
 
 Use [tpc-capture](https://github.com/denesbeck/tpc-capture) to capture your current tmux pane layout into a tpc config file.
 
+## Contributing
+
+Contributions are welcome! Please feel free to submit issues or pull requests.
+
+1. Fork the repository
+2. Run `./setup.sh` to configure git hooks
+3. Create a feature branch (`git checkout -b feature/amazing-feature`)
+4. Commit your changes (`git commit -m 'Add amazing feature'`)
+5. Push to the branch (`git push origin feature/amazing-feature`)
+6. Open a Pull Request
+
 ## License
 
-MIT
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
